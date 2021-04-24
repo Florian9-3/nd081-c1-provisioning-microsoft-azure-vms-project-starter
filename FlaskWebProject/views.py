@@ -67,7 +67,11 @@ def login():
         user = User.query.filter_by(username=form.username.data).first()
         if user is None or not user.check_password(form.password.data):
             flash('Invalid username or password')
+            app.logger.warning('Invalid login attempt for user: '+form.username)
             return redirect(url_for('login'))
+        
+        app.logger.info('User ' + form.username + ' logged in successfully')
+        
         login_user(user, remember=form.remember_me.data)
         next_page = request.args.get('next')
         if not next_page or url_parse(next_page).netloc != '':
@@ -89,7 +93,8 @@ def authorized():
         result = _build_msal_app(cache=cache).acquire_token_by_authorization_code(
             request.args['code'],
             scopes=Config.SCOPE,
-            redirect_uri=url_for('authorized', _external=True, _scheme='https'))
+            redirect_uri=url_for('authorized', _external=True, _scheme='https')
+        )
         if "error" in result:
             return render_template("auth_error.html", result=result)
         session["user"] = result.get("id_token_claims")
@@ -103,6 +108,7 @@ def authorized():
 @app.route('/logout')
 def logout():
     logout_user()
+    app.logger.info('User logged out')
     if session.get("user"): # Used MS Login
         # Wipe out user and its token cache from session
         session.clear()
@@ -115,10 +121,10 @@ def logout():
 
 def _load_cache():
     # TODO: Load the cache from `msal`, if it exists
-    cache = msal.SerializableTokenCache()
+    tokenCache = msal.SerializableTokenCache()
     if session.get('token_cache'):
-        cache.deserialize(session['token_cache'])
-    return cache
+        tokenCache.deserialize(session['token_cache'])
+    return tokenCache
 
 def _save_cache(cache):
     # TODO: Save the cache, if it has changed
